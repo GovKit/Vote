@@ -6,7 +6,7 @@ struct CreateBallotItem: Migration {
             .id()
             .field("description", .string)
             .field("max_options", .int)
-            .field("minOptions", .int)
+            .field("min_options", .int)
             .field("ballot_id", .uuid, .references("ballots", "id"))
             .create()
     }

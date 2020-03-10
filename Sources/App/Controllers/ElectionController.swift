@@ -22,7 +22,7 @@ struct ElectionController {
 
         return try guardedElection(req, content: voterRequest).flatMap { election in
                 do {
-                    guard try election.user.id == user.requireID() else {
+                    guard try election.$user.id == user.requireID() else {
                         throw Abort(.forbidden)
                     }
                     let voter = try Voter(votingKey: voterRequest.votingKey,
@@ -109,6 +109,7 @@ struct ElectionController {
         let voter = Voter.query(on: req.db).with(\.$election)
             .filter(\.$election.$id == submissionRequest.electionID)
             .filter(\.$votingKey == submissionRequest.voterKey)
+            .filter(\.$hasVoted == false)
             .first().unwrap(or: Abort(.notFound))
 
         let submissions = submissionRequest.selectedOptionIDs.map { selectedID in

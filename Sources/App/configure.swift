@@ -22,12 +22,14 @@ public func configure(_ app: Application) throws {
 
 
 private func addMigrations(_ app: Application) {
+    app.migrations.add(CreateUser())
+    app.migrations.add(CreateUserToken())
+
+    app.migrations.add(CreateElection())
     app.migrations.add(CreateBallot())
     app.migrations.add(CreateBallotItem())
     app.migrations.add(CreateBallotOption())
-    app.migrations.add(CreateElection())
-    app.migrations.add(CreateSubmission())
-    app.migrations.add(CreateUser())
-    app.migrations.add(CreateUserToken())
+
     app.migrations.add(CreateVoter())
+    app.migrations.add(CreateSubmission())
 }
