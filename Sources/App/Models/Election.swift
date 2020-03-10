@@ -1,34 +1,32 @@
-import FluentSQLite
+import Fluent
 import Vapor
 
-final class Election: SQLiteModel {
-    var id: Int?
+final class Election: Model, Content {
+    static let schema = "elections"
+
+    @ID(key: .id)
+    var id: UUID?
+
+    @Field(key: "description")
     var description: String
 
-    init(id: Int? = nil, description: String) {
+    @Parent(key: "user_id")
+    var user: User
+
+    @Children(for: \.$election)
+    var ballots: [Ballot]
+
+    @Children(for: \.$election)
+    var voters: [Voter]
+
+    @Children(for: \.$election)
+    var submissions: [Submission]
+
+    init() { }
+
+    init(id: UUID? = nil, description: String, userID: UUID) {
         self.id = id
         self.description = description
+        self.$user.id = userID
     }
 }
-
-extension Election {
-    var ballots: Children<Election, Ballot> {
-        return children(\.electionID)
-    }
-
-    var voters: Children<Election, Voter> {
-        return children(\.electionID)
-    }
-}
-
-extension Election: Migration {
-    static func prepare(on conn: SQLiteConnection) -> Future<Void> {
-        return SQLiteDatabase.create(Ballot.self, on: conn) { builder in
-            builder.field(for: \.id, isIdentifier: true)
-            builder.field(for: \.description)
-        }
-    }
-}
-
-extension Election: Content { }
-extension Election: Parameter { }

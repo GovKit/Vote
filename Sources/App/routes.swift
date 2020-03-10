@@ -1,20 +1,31 @@
-import Crypto
+import Fluent
 import Vapor
 
-/// Register your application's routes here.
-public func routes(_ router: Router) throws {
-    // public routes
+func routes(_ app: Application) throws {
+    app.get { req in
+        return "It works!"
+    }
+
+    app.get("hello") { req -> String in
+        return "Hello, world!"
+    }
+
     let userController = UserController()
-    router.post("users", use: userController.create)
-    
-    // basic / password auth protected routes
-    let basic = router.grouped(User.basicAuthMiddleware(using: BCryptDigest()))
-    basic.post("login", use: userController.login)
-    
-    // bearer / token auth protected routes
-    let bearer = router.grouped(User.tokenAuthMiddleware())
-    let todoController = TodoController()
-    bearer.get("todos", use: todoController.index)
-    bearer.post("todos", use: todoController.create)
-    bearer.delete("todos", Todo.parameter, use: todoController.delete)
+    app.post("register", use: userController.create)
+
+    let passwordProtected = app.grouped(User.authenticator().middleware())
+    passwordProtected.post("login", use: userController.login)
+
+    let tokenProtected = app.grouped(UserToken.authenticator().middleware())
+
+    let electionController = ElectionController()
+    app.post("vote", use: electionController.submitVote)
+
+    let elections = tokenProtected.grouped("elections")
+    elections.post("", use: electionController.create)
+    elections.post("voters", use: electionController.createVoter)
+    elections.post("ballots", use: electionController.createBallot)
+    elections.post("ballot_items", use: electionController.createBallotItem)
+    elections.post("ballot_options", use: electionController.createBallotOption)
+
 }

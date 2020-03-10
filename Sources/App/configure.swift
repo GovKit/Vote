@@ -1,39 +1,33 @@
-import Authentication
-import FluentSQLite
+import Fluent
+import FluentPostgresDriver
 import Vapor
 
-/// Called before your application initializes.
-public func configure(_ config: inout Config, _ env: inout Environment, _ services: inout Services) throws {
-    // Register providers first
-    try services.register(FluentSQLiteProvider())
-    try services.register(AuthenticationProvider())
+// configures your application
+public func configure(_ app: Application) throws {
+    // uncomment to serve files from /Public folder
+    // app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
 
-    // Register routes to the router
-    let router = EngineRouter.default()
-    try routes(router)
-    services.register(router, as: Router.self)
+    app.databases.use(.postgres(
+        hostname: Environment.get("DATABASE_HOST") ?? "localhost",
+        username: Environment.get("DATABASE_USERNAME") ?? "vapor_username",
+        password: Environment.get("DATABASE_PASSWORD") ?? "vapor_password",
+        database: Environment.get("DATABASE_NAME") ?? "vapor_database"
+    ), as: .psql)
 
-    // Register middleware
-    var middlewares = MiddlewareConfig() // Create _empty_ middleware config
-    // middlewares.use(SessionsMiddleware.self) // Enables sessions.
-    // middlewares.use(FileMiddleware.self) // Serves files from `Public/` directory
-    middlewares.use(ErrorMiddleware.self) // Catches errors and converts to HTTP response
-    services.register(middlewares)
+    addMigrations(app)
 
-    // Configure a SQLite database
-    let sqlite = try SQLiteDatabase(storage: .memory)
+    // register routes
+    try routes(app)
+}
 
-    // Register the configured SQLite database to the database config.
-    var databases = DatabasesConfig()
-    databases.enableLogging(on: .sqlite)
-    databases.add(database: sqlite, as: .sqlite)
-    services.register(databases)
 
-    /// Configure migrations
-    var migrations = MigrationConfig()
-    migrations.add(model: User.self, database: .sqlite)
-    migrations.add(model: UserToken.self, database: .sqlite)
-    migrations.add(model: Todo.self, database: .sqlite)
-    services.register(migrations)
-
+private func addMigrations(_ app: Application) {
+    app.migrations.add(CreateBallot())
+    app.migrations.add(CreateBallotItem())
+    app.migrations.add(CreateBallotOption())
+    app.migrations.add(CreateElection())
+    app.migrations.add(CreateSubmission())
+    app.migrations.add(CreateUser())
+    app.migrations.add(CreateUserToken())
+    app.migrations.add(CreateVoter())
 }

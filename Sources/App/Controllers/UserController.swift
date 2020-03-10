@@ -1,68 +1,43 @@
-import Crypto
+import Fluent
 import Vapor
-import FluentSQLite
 
-/// Creates new users and logs them in.
-final class UserController {
-    /// Logs a user in, returning a token for accessing protected endpoints.
-    func login(_ req: Request) throws -> Future<UserToken> {
-        // get user auth'd by basic auth middleware
-        let user = try req.requireAuthenticated(User.self)
-        
-        // create new token for this user
-        let token = try UserToken.create(userID: user.requireID())
-        
-        // save and return token
-        return token.save(on: req)
-    }
-    
-    /// Creates a new user.
-    func create(_ req: Request) throws -> Future<UserResponse> {
-        // decode request content
-        return try req.content.decode(CreateUserRequest.self).flatMap { user -> Future<User> in
-            // verify that passwords match
-            guard user.password == user.verifyPassword else {
-                throw Abort(.badRequest, reason: "Password and verification must match.")
-            }
-            
-            // hash user's password using BCrypt
-            let hash = try BCrypt.hash(user.password)
-            // save new user
-            return User(id: nil, name: user.name, email: user.email, passwordHash: hash)
-                .save(on: req)
-        }.map { user in
-            // map to public user response (omits password hash)
-            return try UserResponse(id: user.requireID(), name: user.name, email: user.email)
+struct UserController {
+    func create(req: Request) throws -> EventLoopFuture<User> {
+        try User.Create.validate(req)
+        let create = try req.content.decode(User.Create.self)
+        guard create.password == create.confirmPassword else {
+            throw Abort(.badRequest, reason: "Passwords did not match")
         }
+        let user = try User(
+            name: create.name,
+            email: create.email,
+            passwordHash: Bcrypt.hash(create.password)
+        )
+        return user.save(on: req.db)
+            .map { user }
+    }
+
+    func login(req: Request) throws -> EventLoopFuture<UserToken> {
+        let user = try req.auth.require(User.self)
+        let token = try user.generateToken()
+        return token.save(on: req.db)
+            .map { token }
     }
 }
 
-// MARK: Content
-
-/// Data required to create a user.
-struct CreateUserRequest: Content {
-    /// User's full name.
-    var name: String
-    
-    /// User's email address.
-    var email: String
-    
-    /// User's desired password.
-    var password: String
-    
-    /// User's password repeated to ensure they typed it correctly.
-    var verifyPassword: String
+extension User {
+    struct Create: Content {
+        var name: String
+        var email: String
+        var password: String
+        var confirmPassword: String
+    }
 }
 
-/// Public representation of user data.
-struct UserResponse: Content {
-    /// User's unique identifier.
-    /// Not optional since we only return users that exist in the DB.
-    var id: Int
-    
-    /// User's full name.
-    var name: String
-    
-    /// User's email address.
-    var email: String
+extension User.Create: Validatable {
+    static func validations(_ validations: inout Validations) {
+        validations.add("name", as: String.self, is: !.empty)
+        validations.add("email", as: String.self, is: .email)
+        validations.add("password", as: String.self, is: .count(8...))
+    }
 }

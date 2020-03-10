@@ -1,40 +1,34 @@
-import FluentSQLite
+import Fluent
 import Vapor
 
-final class BallotItem: SQLiteModel {
-    var id: Int?
+final class BallotItem: Model, Content {
+    static let schema = "ballot_items"
+
+    @ID(key: .id)
+    var id: UUID?
+
+    @Field(key: "description")
     var description: String
+
+    @Field(key: "max_options")
     var maxOptions: Int
+
+    @Field(key: "min_options")
     var minOptions: Int
 
-    var ballotID: Ballot.ID
+    @Parent(key: "ballot_id")
+    var ballot: Ballot
 
-    init(id: Int? = nil, description: String, maxOptions: Int, minOptions: Int, ballotID: Ballot.ID) {
+    @Children(for: \.$parentItem)
+    var options: [BallotOption]
+
+    init() { }
+    
+    init(id: UUID? = nil, description: String, maxOptions: Int, minOptions: Int, ballotID: UUID) {
         self.id = id
         self.description = description
         self.maxOptions = maxOptions
         self.minOptions = minOptions
-        self.ballotID = ballotID
+        self.$ballot.id = ballotID
     }
 }
-
-extension BallotItem {
-    var options: Children<BallotItem, BallotOption> {
-        return children(\.itemID)
-    }
-}
-
-extension BallotItem: Migration {
-    static func prepare(on conn: SQLiteConnection) -> Future<Void> {
-        return SQLiteDatabase.create(BallotItem.self, on: conn) { builder in
-            builder.field(for: \.id, isIdentifier: true)
-            builder.field(for: \.description)
-            builder.field(for: \.maxOptions)
-            builder.field(for: \.minOptions)
-            builder.reference(from: \.ballotID, to: \Ballot.id)
-        }
-    }
-}
-
-extension BallotItem: Content { }
-extension BallotItem: Parameter { }

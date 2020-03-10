@@ -1,82 +1,47 @@
-import Authentication
-import Crypto
-import FluentSQLite
+import Fluent
 import Vapor
 
-/// An ephermal authentication token that identifies a registered user.
-final class UserToken: SQLiteModel {
-    /// Creates a new `UserToken` for a given user.
-    static func create(userID: User.ID) throws -> UserToken {
-        // generate a random 128-bit, base64-encoded string.
-        let string = try CryptoRandom().generateData(count: 16).base64EncodedString()
-        // init a new `UserToken` from that string.
-        return .init(string: string, userID: userID)
-    }
-    
-    /// See `Model`.
-    static var deletedAtKey: TimestampKey? { return \.expiresAt }
-    
-    /// UserToken's unique identifier.
-    var id: Int?
-    
-    /// Unique token string.
-    var string: String
-    
-    /// Reference to user that owns this token.
-    var userID: User.ID
-    
-    /// Expiration date. Token will no longer be valid after this point.
+final class UserToken: Model, Content {
+    static let schema = "user_tokens"
+
+    @ID(key: .id)
+    var id: UUID?
+
+    @Field(key: "value")
+    var value: String
+
+    @Parent(key: "user_id")
+    var user: User
+
+    @Field(key: "expires_at")
     var expiresAt: Date?
-    
-    /// Creates a new `UserToken`.
-    init(id: Int? = nil, string: String, userID: User.ID) {
+
+    init() { }
+
+    init(id: UUID? = nil, value: String, userID: User.IDValue) {
         self.id = id
-        self.string = string
+        self.value = value
+        self.$user.id = userID
         // set token to expire after 5 hours
         self.expiresAt = Date.init(timeInterval: 60 * 60 * 5, since: .init())
-        self.userID = userID
     }
 }
 
-extension UserToken {
-    /// Fluent relation to the user that owns this token.
-    var user: Parent<UserToken, User> {
-        return parent(\.userID)
+extension UserToken: ModelUserToken {
+    static let valueKey = \UserToken.$value
+    static let userKey = \UserToken.$user
+
+    var isValid: Bool {
+        guard let expirationDate = expiresAt else { return false }
+        return Date() > expirationDate
     }
 }
 
-/// Allows this model to be used as a TokenAuthenticatable's token.
-extension UserToken: Token {
-    /// See `Token`.
-    typealias UserType = User
-    
-    /// See `Token`.
-    static var tokenKey: WritableKeyPath<UserToken, String> {
-        return \.string
-    }
-    
-    /// See `Token`.
-    static var userIDKey: WritableKeyPath<UserToken, User.ID> {
-        return \.userID
+extension User {
+    func generateToken() throws -> UserToken {
+        try .init(
+            value: [UInt8].random(count: 16).base64,
+            userID: self.requireID()
+        )
     }
 }
-
-/// Allows `UserToken` to be used as a Fluent migration.
-extension UserToken: Migration {
-    /// See `Migration`.
-    static func prepare(on conn: SQLiteConnection) -> Future<Void> {
-        return SQLiteDatabase.create(UserToken.self, on: conn) { builder in
-            builder.field(for: \.id, isIdentifier: true)
-            builder.field(for: \.string)
-            builder.field(for: \.userID)
-            builder.field(for: \.expiresAt)
-            builder.reference(from: \.userID, to: \User.id)
-        }
-    }
-}
-
-/// Allows `UserToken` to be encoded to and decoded from HTTP messages.
-extension UserToken: Content { }
-
-/// Allows `UserToken` to be used as a dynamic parameter in route definitions.
-extension UserToken: Parameter { }

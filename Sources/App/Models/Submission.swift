@@ -1,39 +1,30 @@
-import FluentSQLite
+import Fluent
 import Vapor
 
-final class Submission: SQLiteModel {
-    var id: Int?
+final class Submission: Model, Content {
+    static let schema = "submissions"
 
-    var itemID: BallotItem.ID
-    var selectionID: BallotOption.ID
+    @ID(key: .id)
+    var id: UUID?
 
-    init(id: Int? = nil, itemID: BallotItem.ID, selectionID: BallotOption.ID) {
+    @Parent(key: "election_id")
+    var election: Election
+
+    @Parent(key: "item_id")
+    var item: BallotItem
+
+    @Parent(key: "selection_id")
+    var selection: BallotOption
+
+    init() { }
+
+    init(id: UUID? = nil,
+         electionID: UUID,
+         itemID: UUID,
+         selectionID: UUID) {
         self.id = id
-        self.itemID = itemID
-        self.selectionID = selectionID
+        self.$election.id = electionID
+        self.$item.id = itemID
+        self.$selection.id = selectionID
     }
 }
-
-extension Submission {
-    var item: Parent<Submission, BallotItem> {
-        return parent(\.itemID)
-    }
-
-    var selection: Parent<Submission, BallotOption> {
-        return parent(\.selectionID)
-    }
-}
-
-extension Submission: Migration {
-    static func prepare(on conn: SQLiteConnection) -> Future<Void> {
-        return SQLiteDatabase.create(Submission.self, on: conn) { builder in
-            builder.field(for: \.id, isIdentifier: true)
-            builder.reference(from: \.itemID, to: \BallotItem.id)
-            builder.reference(from: \.selectionID, to: \BallotOption.id)
-
-        }
-    }
-}
-
-extension Submission: Content { }
-extension Submission: Parameter { }
