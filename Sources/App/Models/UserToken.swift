@@ -33,7 +33,7 @@ extension UserToken: ModelUserToken {
 
     var isValid: Bool {
         guard let expirationDate = expiresAt else { return false }
-        return Date() > expirationDate
+        return Date() < expirationDate
     }
 }
 

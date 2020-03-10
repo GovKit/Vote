@@ -2,9 +2,9 @@ import Fluent
 import Vapor
 
 struct UserController {
-    func create(req: Request) throws -> EventLoopFuture<UserToken> {
-        try User.Create.validate(req)
-        let create = try req.content.decode(User.Create.self)
+    func create(req: Request) throws -> EventLoopFuture<UserTokenResponse> {
+        try CreateUserRequest.validate(req)
+        let create = try req.content.decode(CreateUserRequest.self)
         guard create.password == create.confirmPassword else {
             throw Abort(.badRequest, reason: "Passwords did not match")
         }
@@ -23,33 +23,30 @@ struct UserController {
         }
     }
 
-    func login(req: Request) throws -> EventLoopFuture<UserToken> {
+    func login(req: Request) throws -> EventLoopFuture<UserTokenResponse> {
         let user = try req.auth.require(User.self)
         return try token(for: user, db: req.db)
     }
 
-    func token(for user: User, db: Database) throws -> EventLoopFuture<UserToken> {
+    func token(for user: User, db: Database) throws -> EventLoopFuture<UserTokenResponse> {
         let token = try user.generateToken()
         return token.save(on: db)
-            .map { token }
+            .map { UserTokenResponse(value: token.value) }
     }
 }
 
-extension User {
-    struct Create: Content {
-        var name: String
-        var email: String
-        var password: String
-        var confirmPassword: String
-    }
-
-    struct Response {
-        var name: String
-        var email: String
-    }
+struct CreateUserRequest: Content {
+    var name: String
+    var email: String
+    var password: String
+    var confirmPassword: String
 }
 
-extension User.Create: Validatable {
+struct UserTokenResponse: Content {
+    var value: String
+}
+
+extension CreateUserRequest: Validatable {
     static func validations(_ validations: inout Validations) {
         validations.add("name", as: String.self, is: !.empty)
         validations.add("email", as: String.self, is: .email)
