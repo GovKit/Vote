@@ -13,8 +13,8 @@ final class UserToken: Model, Content {
     @Parent(key: "user_id")
     var user: User
 
-    @Field(key: "expires_at")
-    var expiresAt: Date?
+//    @Field(key: "expires_at")
+//    var expiresAt: Date?
 
     init() { }
 
@@ -23,7 +23,7 @@ final class UserToken: Model, Content {
         self.value = value
         self.$user.id = userID
         // set token to expire after 5 hours
-        self.expiresAt = Date.init(timeInterval: 60 * 60 * 5, since: .init())
+//        self.expiresAt = Date.init(timeInterval: 60 * 60 * 5, since: .init())
     }
 }
 
@@ -32,8 +32,7 @@ extension UserToken: ModelUserToken {
     static let userKey = \UserToken.$user
 
     var isValid: Bool {
-        guard let expirationDate = expiresAt else { return false }
-        return Date() < expirationDate
+        return true
     }
 }
 

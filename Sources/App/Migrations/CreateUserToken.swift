@@ -6,7 +6,7 @@ struct CreateUserToken: Migration {
             .id()
             .field("value", .string, .required)
             .field("user_id", .uuid, .required, .references("users", "id"))
-            .field("expires_at", .date)
+//            .field("expires_at", .date)
             .unique(on: "value")
             .create()
     }

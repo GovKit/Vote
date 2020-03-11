@@ -22,27 +22,19 @@ final class AppTests: XCTestCase {
         }
     }
 
-    func testRegister() throws {
-        try register(app: app) { token in
-            XCTAssertTrue(token.value != "")
-        }
-    }
-
     func testLogin() throws {
-
-        let basicAuth = "test@test.com:thisPassword".data(using: .utf8)
-        let headers: HTTPHeaders = ["Authorization": "Basic \(basicAuth?.base64EncodedString() ?? "")"]
+        let headers: HTTPHeaders = ["Authorization": "Basic dGVzdEB0ZXN0LmNvbTp0ZXN0aW5nUGFzc3dvcmQ="]
         try register(app: app) { _ in
             try app.test(.POST, "login", headers: headers) { res in
+                XCTAssertEqual(res.status, .ok)
                 let token = try res.content.decode(UserTokenResponse.self)
                 XCTAssertTrue(token.value != "")
-                XCTAssertEqual(res.status, .ok)
             }
         }
     }
 
     func testCreateElection() throws {
-        try register(app: app) { token in
+        try login(app: app) { token in
             let headers = standardHeaders(with: token)
             let body = try CreateElectionRequest(description: "Test Election").asByteBuffer()
             try app.test(.POST, "elections", headers: headers, body: body) { res in
@@ -63,20 +55,37 @@ extension Content {
 }
 
 extension XCTestCase {
+
     func standardHeaders(with token: UserTokenResponse) -> HTTPHeaders {
-        let headers: HTTPHeaders = ["content-type": "application/json",
-                                   "Authorization": "Bearer \(token.value)"]
+        let headers: HTTPHeaders = ["Authorization": "Bearer \(token.value)",
+                                    "content-type": "application/json"]
         return headers
     }
 
-    func register(app: Application, onComplete: (UserTokenResponse) throws -> Void) throws {
+    func register(app: Application, onComplete: (XCTHTTPResponse) throws -> Void) throws {
         let body = try CreateUserRequest(name: "David",
                                    email: "test@test.com",
                                    password: "thisPassword",
                                    confirmPassword: "thisPassword").asByteBuffer()
         try app.test(.POST, "register", headers: ["content-type": "application/json"], body: body) { res in
-            let token = try res.content.decode(UserTokenResponse.self)
-            try onComplete(token)
+            try onComplete(res)
+        }
+    }
+
+    func login(app: Application, onComplete: (UserTokenResponse) throws -> Void) throws {
+        let body = try CreateUserRequest(name: "David",
+                                   email: "test@test.com",
+                                   password: "thisPassword",
+                                   confirmPassword: "thisPassword").asByteBuffer()
+        try app.test(.POST, "register", headers: ["content-type": "application/json"], body: body) { _ in
+            let headers: HTTPHeaders = ["Authorization": "Basic dGVzdEB0ZXN0LmNvbTp0ZXN0aW5nUGFzc3dvcmQ="]
+            try register(app: app) { _ in
+                try app.test(.POST, "login", headers: headers) { res in
+                    let token = try res.content.decode(UserTokenResponse.self)
+                    try onComplete(token)
+                }
+            }
+
         }
     }
 

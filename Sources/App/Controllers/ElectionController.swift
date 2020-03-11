@@ -3,6 +3,9 @@ import Vapor
 
 struct ElectionController {
     func create(_ req: Request) throws -> EventLoopFuture<Election> {
+        _ = UserToken.query(on: req.db).all().mapEach { token -> Void in
+            print("TOKEN: \(token.value)")
+        }
         // fetch auth'd user
         let user = try req.auth.require(User.self)
 
@@ -15,12 +18,14 @@ struct ElectionController {
     }
 
     func createVoter(_ req: Request) throws -> EventLoopFuture<Voter> {
-        // fetch auth'd user
+        guard let electionID = req.parameters.get("electionID", as: UUID.self) else {
+            throw Abort(.notFound)
+        }
         let user = try req.auth.require(User.self)
 
         let voterRequest = try req.content.decode(CreateVoterRequest.self)
 
-        return try guardedElection(req, content: voterRequest).flatMap { election in
+        return try guardedElection(req, id: electionID).flatMap { election in
                 do {
                     guard try election.$user.id == user.requireID() else {
                         throw Abort(.forbidden)
@@ -37,12 +42,14 @@ struct ElectionController {
     }
 
     func createBallot(_ req: Request) throws -> EventLoopFuture<Ballot> {
-        // fetch auth'd user
+        guard let electionID = req.parameters.get("electionID", as: UUID.self) else {
+            throw Abort(.notFound)
+        }
         let user = try req.auth.require(User.self)
 
         let ballotRequest = try req.content.decode(CreateBallotRequest.self)
 
-        return try guardedElection(req, content: ballotRequest).flatMap { election in
+        return try guardedElection(req, id: electionID).flatMap { election in
                 do {
                     guard try election.$user.id == user.requireID() else {
                         throw Abort(.forbidden)
@@ -57,10 +64,15 @@ struct ElectionController {
     }
 
     func createBallotItem(_ req: Request) throws -> EventLoopFuture<BallotItem> {
+        guard let electionID = req.parameters.get("electionID", as: UUID.self),
+            let ballotID = req.parameters.get("ballotID", as: UUID.self) else {
+                throw Abort(.notFound)
+        }
+
         let itemRequest = try req.content.decode(CreateBallotItemRequest.self)
 
-        let election = try guardedElection(req, content: itemRequest)
-        let ballot = Ballot.find(itemRequest.ballotID, on: req.db)
+        let election = try guardedElection(req, id: electionID)
+        let ballot = Ballot.find(ballotID, on: req.db)
             .unwrap(or: Abort(.notFound))
 
         return ballot.and(election).flatMap { (ballot, election) in
@@ -80,10 +92,14 @@ struct ElectionController {
     }
 
     func createBallotOption(_ req: Request) throws -> EventLoopFuture<BallotOption> {
+        guard let electionID = req.parameters.get("electionID", as: UUID.self),
+            let itemID = req.parameters.get("ballotItemID", as: UUID.self) else {
+                throw Abort(.notFound)
+        }
         let optionRequest = try req.content.decode(CreateBallotOptionRequest.self)
 
-        let election = try guardedElection(req, content: optionRequest)
-        let ballotItem = BallotItem.find(optionRequest.itemID, on: req.db)
+        let election = try guardedElection(req, id: electionID)
+        let ballotItem = BallotItem.find(itemID, on: req.db)
             .unwrap(or: Abort(.notFound))
 
         return election.and(ballotItem).flatMap { (election, ballotItem) in
@@ -104,10 +120,13 @@ struct ElectionController {
     }
 
     func submitVote(_ req: Request) throws -> EventLoopFuture<HTTPStatus> {
+        guard let electionID = req.parameters.get("electionID", as: UUID.self) else {
+                throw Abort(.notFound)
+        }
         let submissionRequest = try req.content.decode(SubmissionRequest.self)
 
         let voter = Voter.query(on: req.db).with(\.$election)
-            .filter(\.$election.$id == submissionRequest.electionID)
+            .filter(\.$election.$id == electionID)
             .filter(\.$votingKey == submissionRequest.voterKey)
             .filter(\.$hasVoted == false)
             .first().unwrap(or: Abort(.notFound))
@@ -115,13 +134,13 @@ struct ElectionController {
         let submissions = submissionRequest.selectedOptionIDs.map { selectedID in
             return BallotOption.find(selectedID, on: req.db)
                 .unwrap(or: Abort(.notFound)).flatMap { option in
-                    return self.election(withID: submissionRequest.electionID,
+                    return self.election(withID: electionID,
                                     hasOption: option,
                                     db: req.db).flatMapThrowing { contains -> Submission in
                                         guard contains else {
                                             throw Abort(.forbidden)
                                         }
-                                        return Submission(electionID: submissionRequest.electionID,
+                                        return Submission(electionID: electionID,
                                                           itemID: option.$parentItem.id,
                                                           selectionID: selectedID)
 
@@ -146,11 +165,11 @@ struct ElectionController {
         }
     }
 
-    private func guardedElection(_ req: Request, content: ElectionRequest) throws -> EventLoopFuture<Election> {
+    private func guardedElection(_ req: Request, id: UUID) throws -> EventLoopFuture<Election> {
         // fetch auth'd user
         let user = try req.auth.require(User.self)
 
-        return Election.find(content.electionID, on: req.db)
+        return Election.find(id, on: req.db)
             .unwrap(or: Abort(.notFound)).flatMapThrowing { election in
                 guard try election.$user.id == user.requireID() else {
                     throw Abort(.forbidden)
@@ -166,35 +185,22 @@ struct CreateElectionRequest: Content {
     var description: String
 }
 
-protocol ElectionRequest {
-    var electionID: UUID { get }
-}
-
-struct CreateVoterRequest: Content, ElectionRequest {
-    var electionID: UUID
-
+struct CreateVoterRequest: Content {
     var votingKey: String
     var name: String
 }
 
-struct CreateBallotRequest: Content, ElectionRequest {
-    var electionID: UUID
-
+struct CreateBallotRequest: Content {
     var description: String
 }
 
-struct CreateBallotItemRequest: Content, ElectionRequest {
-    var electionID: UUID
-
-    var ballotID: UUID
+struct CreateBallotItemRequest: Content {
     var description: String
     var maxOptions: Int
     var minOptions: Int
 }
 
-struct CreateBallotOptionRequest: Content, ElectionRequest {
-    var electionID: UUID
-
+struct CreateBallotOptionRequest: Content {
     var itemID: UUID
     var description: String
     var value: String
@@ -202,7 +208,6 @@ struct CreateBallotOptionRequest: Content, ElectionRequest {
 
 struct SubmissionRequest: Content {
     var voterKey: String
-    var electionID: UUID
 
     var selectedOptionIDs: [UUID]
 }

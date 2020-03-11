@@ -2,7 +2,7 @@ import Fluent
 import Vapor
 
 struct UserController {
-    func create(req: Request) throws -> EventLoopFuture<UserTokenResponse> {
+    func create(req: Request) throws -> EventLoopFuture<HTTPStatus> {
         try CreateUserRequest.validate(req)
         let create = try req.content.decode(CreateUserRequest.self)
         guard create.password == create.confirmPassword else {
@@ -14,13 +14,14 @@ struct UserController {
             passwordHash: Bcrypt.hash(create.password)
         )
         return user.save(on: req.db)
-            .flatMap {
-                do {
-                    return try self.token(for: user, db: req.db)
-                } catch {
-                    return req.eventLoop.makeFailedFuture(error)
-                }
-        }
+            .transform(to: .ok)
+//            .flatMap {
+//                do {
+//                    return try self.token(for: user, db: req.db)
+//                } catch {
+//                    return req.eventLoop.makeFailedFuture(error)
+//                }
+//        }
     }
 
     func login(req: Request) throws -> EventLoopFuture<UserTokenResponse> {

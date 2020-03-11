@@ -19,13 +19,21 @@ func routes(_ app: Application) throws {
     let tokenProtected = app.grouped(UserToken.authenticator().middleware())
 
     let electionController = ElectionController()
-    app.post("vote", use: electionController.submitVote)
+    app.post("elections", ":electionID", "vote",
+             use: electionController.submitVote)
 
     let elections = tokenProtected.grouped("elections")
     elections.post("", use: electionController.create)
-    elections.post("voters", use: electionController.createVoter)
-    elections.post("ballots", use: electionController.createBallot)
-    elections.post("ballot_items", use: electionController.createBallotItem)
-    elections.post("ballot_options", use: electionController.createBallotOption)
-
+    elections.post(":electionID", "voters",
+                   use: electionController.createVoter)
+    elections.post(":electionID", "ballots",
+                   use: electionController.createBallot)
+    elections.post(":electionID", "ballots",
+                   ":ballotID", "ballot_items",
+                   use: electionController.createBallotItem)
+    elections.post(":electionID",
+                   "ballots", ":ballotID",
+                   "ballot_items", ":ballotItemID",
+                   "ballot_options",
+                   use: electionController.createBallotOption)
 }
