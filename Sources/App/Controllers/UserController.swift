@@ -15,13 +15,6 @@ struct UserController {
         )
         return user.save(on: req.db)
             .transform(to: .ok)
-//            .flatMap {
-//                do {
-//                    return try self.token(for: user, db: req.db)
-//                } catch {
-//                    return req.eventLoop.makeFailedFuture(error)
-//                }
-//        }
     }
 
     func login(req: Request) throws -> EventLoopFuture<UserTokenResponse> {
